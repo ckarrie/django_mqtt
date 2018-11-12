@@ -1,7 +1,7 @@
 language: python
 
 python:
-  - "2.7"
+  - "3.6"
 
 branches:
   only:
@@ -19,6 +19,6 @@ before_script:
   - wget http://test.mosquitto.org/ssl/mosquitto.org.crt -O ./test_web/ca/mosquitto.org.crt
 
 script:
-  - python manage.py test
+  - python3 manage.py test
   - coverage run --source='.' manage.py test
   - coverage report -m --skip-covered
