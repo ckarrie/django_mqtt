@@ -1,4 +1,3 @@
-
 from django.utils.translation import ugettext_lazy as _
 from django.utils.deconstruct import deconstructible
 from django.core.exceptions import ValidationError
@@ -29,6 +28,7 @@ class ClientIdValidator(object):
         cli = found.group('client')
         if cli != value:
             raise ValidationError(self.message, code=self.code)
+
 
 client_id_validator = ClientIdValidator()
 
@@ -70,5 +70,6 @@ class TopicValidator(object):
             raise ValidationError(self.message, code=self.code)
         if found.group('topic') != value:
             raise ValidationError(self.message, code=self.code)
+
 
 topic_validator = TopicValidator()

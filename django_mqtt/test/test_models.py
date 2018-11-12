@@ -15,6 +15,7 @@ class TopicModelsTestCase(TestCase):
         self.assertEqual('test' in topic_plus, True)
         self.assertEqual('/test' in topic_plus, False)
         self.assertEqual('/test/sd' in topic_plus, False)
+
         topic1 = Topic.objects.create(name='/+/two')
         self.assertEqual('/test/two' in topic1, True)
         self.assertEqual('/1/two' in topic1, True)
@@ -27,6 +28,7 @@ class TopicModelsTestCase(TestCase):
         self.assertEqual('#' > topic1, True)
         self.assertEqual('+/+' > topic1, False)
         self.assertEqual('/+/+' > topic1, True)
+
         topic2 = Topic.objects.create(name='+/two')
         self.assertEqual('test/two' in topic2, True)
         self.assertEqual('1/two' in topic2, True)
@@ -97,14 +99,18 @@ class TopicModelsTestCase(TestCase):
     def test_topic_dollar(self):
         topic = Topic.objects.create(name='$SYS/+')
         multi = Topic.objects.create(name='$SYS/#')
+
         self.assertEqual(topic == multi, False)
         self.assertEqual(topic in multi, True)
         self.assertEqual(topic < multi, True)
         self.assertEqual(multi in topic, False)
         self.assertEqual(multi > topic, True)
+
         self.assertEqual('$SYSTEM/test/one' in multi, False)
+
         self.assertRaises(ValidationError, Topic.objects.create, name='$+')
         self.assertRaises(ValidationError, Topic.objects.create, name='$#')
+
         topic = Topic.objects.create(name='$/+')
         self.assertEqual('+/+' in topic, False)
         self.assertEqual('+/#' in topic, False)
@@ -122,7 +128,7 @@ class TopicModelsTestCase(TestCase):
 
     def test_topic(self):
         self.assertEqual(str(Topic.objects.create(name='test')), 'test')
-        self.assertEqual(unicode(Topic.objects.create(name='test/one')), u'test/one')
+        self.assertEqual(str(Topic.objects.create(name='test/one')), u'test/one')
         self.assertEqual(Topic.objects.create(name='/test'), '/test')
         topic = Topic.objects.create(name='/test/one')
         self.assertEqual('/test/one' in topic, True)
@@ -202,7 +208,7 @@ class ClientIdModelsTestCase(TestCase):
         if hasattr(settings, 'MQTT_ALLOW_EMPTY_CLIENT_ID') and settings.MQTT_ALLOW_EMPTY_CLIENT_ID:  # pragma: no cover
             ClientId.objects.create(name='')
         self.assertEqual(str(ClientId.objects.create(name='1234')), '1234')
-        self.assertEqual(unicode(ClientId.objects.create(name='test')), u'test')
+        self.assertEqual(str(ClientId.objects.create(name='test')), u'test')
         ClientId.objects.create(name=gen_client_id())
 
     def test_wrong_client_id(self):

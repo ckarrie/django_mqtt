@@ -1,6 +1,6 @@
 from django_mqtt.publisher.models import *
 from django.core.files import File
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django_mqtt.publisher.management.commands.mqtt_updater import Command as CommandUpdater
 from paho.mqtt.client import MQTTMessage
 import os
@@ -59,7 +59,7 @@ class PublishTestCase(TestCase):
         self.assertNotEqual(server.status, PROTO_MQTT_CONN_OK)
         auth = Auth.objects.create(user='admin', password='admin1234')
         self.assertEqual(str(auth), 'admin:*********')
-        self.assertEqual(unicode(auth), u'admin:*********')
+        self.assertEqual(str(auth), u'admin:*********')
         client = Client.objects.create(server=server, auth=auth, clean_session=False, keepalive=5)
         self.assertEqual(client.client_id, None)
 
@@ -113,12 +113,12 @@ class PublishTestCase(TestCase):
         client_id = ClientId.objects.create(name='publisher')
         server = Server.objects.create(host='test.mosquitto.org', port=1883)
         self.assertEqual(str(server), 'mqtt://test.mosquitto.org:1883')
-        self.assertEqual(unicode(server), u'mqtt://test.mosquitto.org:1883')
+        # self.assertEqual(server, u'mqtt://test.mosquitto.org:1883')
         self.assertEqual(server.status, PROTO_MQTT_CONN_ERROR_UNKNOWN)
         self.assertNotEqual(server.status, PROTO_MQTT_CONN_OK)
         client = Client.objects.create(server=server, clean_session=True, client_id=client_id)
         self.assertEqual(str(client), 'publisher - mqtt://test.mosquitto.org:1883')
-        self.assertEqual(unicode(client), u'publisher - mqtt://test.mosquitto.org:1883')
+        # self.assertEqual(client, u'publisher - mqtt://test.mosquitto.org:1883')
 
         topic = Topic.objects.create(name='/test/publish')
         for qos in [MQTT_QoS0, MQTT_QoS1, MQTT_QoS2]:
@@ -128,9 +128,6 @@ class PublishTestCase(TestCase):
             data.retain = True
             data.save()
             self.assertEqual(str(data), 'test %(qos)s - /test/publish - publisher - mqtt://test.mosquitto.org:1883' %
-                             {'qos': qos})
-            self.assertEqual(unicode(data),
-                             u'test %(qos)s - /test/publish - publisher - mqtt://test.mosquitto.org:1883' %
                              {'qos': qos})
             data.update_remote()
 
@@ -148,9 +145,9 @@ class CommandUpdaterTestCase(TestCase):
     def setUp(self):
         self.command = CommandUpdater()
         self.message = MQTTMessage()
-        self.message.topic = '/topic/name'
+        self.message.topic = '/topic/name'.encode()
         self.message.qos = 0
-        self.message.payload = 'payload'
+        self.message.payload = 'payload'.encode()
 
     def create_client(self):
         server = Server.objects.create(host='test.mosquitto.org', port=1883)
@@ -187,14 +184,14 @@ class CommandUpdaterTestCase(TestCase):
         self.assertEqual(Data.objects.count(), 1)
         self.assertEqual(Data.objects.get().payload, 'initial payload')
         self.assertIsNone(self.command.on_message(None, None, self.message))
-        self.assertEqual(Data.objects.get().payload, self.message.payload)
+        self.assertEqual(Data.objects.get().payload, str(self.message.payload))
 
     def test_message_for_other(self):
         client = self.create_client()
         self.command.client_db = client
-        topic = Topic.objects.create(name=self.message.topic)
+        topic = Topic.objects.create(name=self.message.topic.encode())
         Data.objects.create(client=client, topic=topic, payload='initial payload')
-        self.message.topic = '/new/topic'
+        self.message.topic = '/new/topic'.encode()
         self.assertIsNone(self.command.on_message(None, None, self.message))
         self.assertEqual(Client.objects.count(), 1)
         self.assertEqual(Topic.objects.count(), 1)
@@ -209,4 +206,4 @@ class CommandUpdaterTestCase(TestCase):
         self.assertEqual(Topic.objects.count(), 1)
         self.assertEqual(Topic.objects.get().name, self.message.topic)
         self.assertEqual(Data.objects.count(), 1)
-        self.assertEqual(Data.objects.get().payload, self.message.payload)
+        self.assertEqual(Data.objects.get().payload, str(self.message.payload))

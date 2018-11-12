@@ -8,7 +8,7 @@ from django_mqtt.models import Topic, ClientId
 
 
 class Command(BaseCommand):
-    help = unicode(_('Connect with client as subscriber, for real time update proposed'))
+    help = str(_('Connect with client as subscriber, for real time update proposed'))
     client_db = None
     create_if_not_exist = False
     use_update = False
@@ -16,28 +16,28 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('topic', action='store',
                             type=str, default=None,
-                            help=unicode(_('Subcribe topic'))
+                            help=str(_('Subcribe topic'))
                             )
         parser.add_argument('--id', action='store',
                             type=int, default=None, dest='id',
-                            help=unicode(_('id from DB object'))
+                            help=str(_('id from DB object'))
                             )
         parser.add_argument('--qos', action='store',
                             type=int, default=0, dest='qos',
-                            help=unicode(_('Quality of Service'))
+                            help=str(_('Quality of Service'))
                             )
         parser.add_argument('--client_id', action='store',
                             type=str, default=None, dest='client_id',
-                            help=unicode(_('client_id for broken'))
+                            help=str(_('client_id for broken'))
                             )
         parser.add_argument(
             '--update', action='store_true', default=False, dest='update',
-            help=unicode(_('Use update method to save the updates, this will not run the django signals'))
+            help=str(_('Use update method to save the updates, this will not run the django signals'))
         )
 
     def handle(self, *args, **options):
         if not options['topic']:
-            raise CommandError(unicode(_('Topic requiered and must be only one')))
+            raise CommandError(str(_('Topic requiered and must be only one')))
         apply_filter = {}
         self.use_update = options['update']
         db_client_id = options['id']
@@ -49,7 +49,7 @@ class Command(BaseCommand):
                 db_client_id = clients.all()[0].pk
             else:
                 if clients.all().count() == 0:
-                    raise CommandError(unicode(_('No client on DB')))
+                    raise CommandError(str(_('No client on DB')))
                 self.stdout.write('id -> client')
                 for obj in clients.all():
                     self.stdout.write("{} \t-> {}".format(obj.pk, obj))
@@ -62,11 +62,11 @@ class Command(BaseCommand):
 
             cli.on_message = self.on_message
             cli.connect(client_db.server.host, client_db.server.port, client_db.keepalive)
-            cli.subscribe(options['topic'], options['qos'])
+            cli.subscribe(options['topic'].encode('utf-8'), options['qos'])
             cli.loop_forever()
             cli.disconnect()
         except Client.DoesNotExist:
-            raise CommandError(unicode(_('Client not exist')))
+            raise CommandError(str(_('Client not exist')))
 
     def on_message(self, client, userdata, message):
         if not self.client_db:
@@ -85,14 +85,16 @@ class Command(BaseCommand):
 
         datas = Data.objects.filter(topic=topic, client=self.client_db)
         data = None
+
         if datas.count() == 1:
             data = datas.get()
         else:
             if self.create_if_not_exist:
                 data = Data.objects.create(topic=topic, client=self.client_db)
+
         if data:
             if self.use_update:
-                Data.objects.filter(pk=data.pk).update(payload=message.payload, qos=message.qos)
+                Data.objects.filter(pk=data.pk).update(payload=message.payload.decode(), qos=message.qos)
             else:
                 data.payload = message.payload
                 data.qos = message.qos

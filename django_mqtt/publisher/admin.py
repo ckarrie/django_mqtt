@@ -18,7 +18,7 @@ class ServerAdmin(admin.ModelAdmin):
 
 class AuthAdmin(admin.ModelAdmin):
     search_fields = ('user',)
-    list_display = ('user', )
+    list_display = ('user',)
 
 
 class ClientAdmin(admin.ModelAdmin):
@@ -32,6 +32,7 @@ class DataLogAdmin(admin.ModelAdmin):
     ordering = ('-datetime',)
     date_hierarchy = 'datetime'
     list_display = ('topic', 'qos', 'retain', 'datetime')
+
 
 admin.site.register(models.SecureConf, SecureConfAdmin)
 admin.site.register(models.Server, ServerAdmin)

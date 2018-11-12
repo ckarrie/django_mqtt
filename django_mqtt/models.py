@@ -86,77 +86,110 @@ class Topic(SecureSave):
     def __eq__(self, other):
         if isinstance(other, Topic):
             return self.name == other.name
-        elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
+        # elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
+        #     return self.name == other
+        elif isinstance(other, str):
             return self.name == other
+
         return False
 
     def __lt__(self, other):
         comp = None
         if isinstance(other, Topic):
             comp = other
-        elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
+        # elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
+        #     comp = Topic(name=other)
+        elif isinstance(other, str):
             comp = Topic(name=other)
+
         if not comp or not comp.is_wildcard():
             return False
+
         return self in comp
 
     def __len__(self):
         return len(self.name)
 
     def __gt__(self, other):
+
         if not self.is_wildcard():
             return False
+
         if isinstance(other, Topic):
             return other in self
-        elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
-            return Topic(other) in self
+        # elif isinstance(other, six.string_types) or isinstance(other, six.text_type):
+        #     return Topic(other) in self
+        elif isinstance(other, str):
+            return Topic(name=other) in self
+
         return False
 
     def is_wildcard(self):
-        return WILDCARD_MULTI_LEVEL in self.name or WILDCARD_SINGLE_LEVEL in self.name
+        return WILDCARD_MULTI_LEVEL in str(self.name) or WILDCARD_SINGLE_LEVEL in str(self.name)
 
     def is_dollar(self):
-        return self.name.startswith(TOPIC_BEGINNING_DOLLAR)
+        return str(self.name).startswith(TOPIC_BEGINNING_DOLLAR)
 
     def __contains__(self, item):
         comp = None
+
         if isinstance(item, Topic):
             comp = item
-        elif isinstance(item, six.string_types) or isinstance(item, six.text_type):
+        # elif isinstance(item, six.string_types) or isinstance(item, six.text_type):
+        #     comp = Topic(name=item)
+        elif isinstance(item, str):
             comp = Topic(name=item)
-        if not comp:
+
+        if comp is None:
             return False
 
         if self == comp:
             return True
+
         elif not self.is_wildcard():
             return False
+
         elif (self.is_dollar() and not comp.is_dollar()) or (comp.is_dollar() and not self.is_dollar()):
             return False
 
         my_parts = self.name.split(TOPIC_SEP)
         comp_parts = comp.name.split(TOPIC_SEP)
+
         if self.is_dollar():
             if my_parts[0] != comp_parts[0]:
                 return False
 
-        comp_size = len(comp_parts)
-        if comp_size < len(my_parts):
-            return False
-        if not self.name.endswith(WILDCARD_MULTI_LEVEL) and comp_size > len(my_parts):
+        if len(comp_parts) < len(my_parts):
+            # print("lengths are different")
             return False
 
-        iter_comp = iter(comp_parts)
-        for part in my_parts:
-            compare = iter_comp.next()
-            if part == WILDCARD_SINGLE_LEVEL:
-                if comp.is_wildcard() and compare == WILDCARD_MULTI_LEVEL:
+        if not self.name.endswith(WILDCARD_MULTI_LEVEL) and len(comp_parts) > len(my_parts):
+            # print("we don't end with a wild card and they're longer than us...")
+            return False
+
+        for me, them in zip(my_parts, comp_parts):
+            if me == WILDCARD_SINGLE_LEVEL and them != '':
+                if comp.is_wildcard() and them == WILDCARD_MULTI_LEVEL:
                     return False
-            elif part == WILDCARD_MULTI_LEVEL:
+            elif me == WILDCARD_MULTI_LEVEL:
                 return True
-            elif part != compare:
+            elif me != them:
                 return False
         return True
+
+        # iter_comp = iter(comp_parts)
+        # for part in my_parts:
+        #     compare = next(iter_comp)
+        #
+        #     if part == WILDCARD_SINGLE_LEVEL:
+        #         if comp.is_wildcard() and compare == WILDCARD_MULTI_LEVEL:
+        #             return False
+        #     elif part == WILDCARD_MULTI_LEVEL:
+        #         return True
+        #
+        #     elif part != compare:
+        #         return False
+        # return True
 
     def get_candidates(self):
         # TODO improve it
