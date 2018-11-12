@@ -5,7 +5,6 @@ from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
 from django.db import models
-import paho.mqtt.client as mqtt
 
 from django_mqtt.publisher.signals import *
 from django_mqtt.protocol import *
@@ -41,18 +40,21 @@ CERT_REQS = (
     (ssl.CERT_OPTIONAL, _('Optional')),
     (ssl.CERT_NONE, _('None')),
 )
-PROTO_SSL_VERSION = (
+PROTO_SSL_VERSION = [
     (ssl.PROTOCOL_TLSv1, 'v1'),
     (ssl.PROTOCOL_SSLv23, 'v2.3'),
-)
+]
+
 try:
     PROTO_SSL_VERSION.append((ssl.PROTOCOL_SSLv2, 'v2'))
 except AttributeError:
     pass  # This protocol is not available if OpenSSL is compiled with the OPENSSL_NO_SSL2 flag.
+
 try:
     PROTO_SSL_VERSION.append((ssl.PROTOCOL_SSLv3, 'v3'))
 except AttributeError:
     pass  # This protocol is not be available if OpenSSL is compiled with the OPENSSL_NO_SSLv3 flag.
+
 PROTO_MQTT_VERSION = (
     (mqtt.MQTTv31, 'v3.1'),
     (mqtt.MQTTv311, 'v3.1.1'),
@@ -119,7 +121,7 @@ class SecureConf(models.Model):
         password to decrypt it, Python will ask for the password at the command line.
 
         :var ciphers: is a string specifying which encryption ciphers are allowable for this connection,
-or None to use the defaults.
+        or None to use the defaults.
     """
     ca_certs = models.FileField(upload_to='ca', storage=private_fs)
     cert_reqs = models.IntegerField(choices=CERT_REQS, default=ssl.CERT_REQUIRED)
@@ -143,7 +145,7 @@ class Server(models.Model):
     """
     host = models.CharField(max_length=1024)
     port = models.IntegerField(default=1883)
-    secure = models.ForeignKey(SecureConf, null=True, blank=True)
+    secure = models.ForeignKey(SecureConf, null=True, blank=True, on_delete=models.CASCADE)
     protocol = models.IntegerField(choices=PROTO_MQTT_VERSION, default=mqtt.MQTTv311)
     status = models.IntegerField(choices=PROTO_MQTT_CONN_STATUS, default=PROTO_MQTT_CONN_ERROR_UNKNOWN)
 
@@ -186,9 +188,9 @@ class Client(models.Model):
         If False, the client is a persistent client and subscription information and queued messages will be retained
         when the client disconnects.
     """
-    server = models.ForeignKey(Server)
-    auth = models.ForeignKey(Auth, blank=True, null=True)
-    client_id = models.ForeignKey(ClientId, null=True, blank=True)
+    server = models.ForeignKey(Server, on_delete=models.CASCADE)
+    auth = models.ForeignKey(Auth, blank=True, null=True, on_delete=models.CASCADE)
+    client_id = models.ForeignKey(ClientId, null=True, blank=True, on_delete=models.CASCADE)
 
     keepalive = models.IntegerField(default=60)
     clean_session = models.BooleanField(default=True)
@@ -200,14 +202,19 @@ class Client(models.Model):
         return "%s - %s" % (self.client_id, self.server)
 
     def get_mqtt_client(self, empty_client_id=False):
+
         client_id = None
         clean = True
+
         if self.client_id:
             client_id = self.client_id.name
             clean = self.clean_session
+
             if not self.clean_session and empty_client_id:
                 client_id = None
+
         cli = mqtt.Client(client_id, clean, protocol=self.server.protocol)
+
         if self.server.secure:
             tls_args = {
                 'cert_reqs': self.server.secure.cert_reqs,
@@ -216,12 +223,15 @@ class Client(models.Model):
             }
             if self.server.secure.certfile:
                 tls_args['certfile'] = self.server.secure.certfile.name
+
             if self.server.secure.keyfile:
                 tls_args['keyfile'] = self.server.secure.keyfile.path
+
             cli.tls_set(self.server.secure.ca_certs, **tls_args)
 
         if self.auth:
             cli.username_pw_set(self.auth.user, self.auth.password)
+
         return cli
 
 
@@ -241,8 +251,8 @@ class Data(models.Model):
 
         :var datetime : Datetime of last change
     """
-    client = models.ForeignKey(Client)
-    topic = models.ForeignKey(Topic)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE)
+    topic = models.ForeignKey(Topic, on_delete=models.CASCADE)
     qos = models.IntegerField(choices=PROTO_MQTT_QoS, default=0)
     payload = models.TextField(blank=True, null=True)
     retain = models.BooleanField(default=False)
@@ -258,24 +268,36 @@ class Data(models.Model):
         return "%s - %s - %s" % (self.payload, self.topic, self.client)
 
     def update_remote(self):
+
         cli = self.client.get_mqtt_client(empty_client_id=self.client.client_id is None)
+
         try:
             mqtt_connect.send(sender=Server.__class__, client=self.client)
+
             cli.connect(self.client.server.host, self.client.server.port, self.client.keepalive)
+
             mqtt_pre_publish.send(sender=Data.__class__, client=self.client,
                                   topic=self.topic, payload=self.payload, qos=self.qos, retain=self.retain)
+
             (rc, mid) = cli.publish(self.topic.name, payload=self.payload, qos=self.qos, retain=self.retain)
+
             self.client.server.status = rc
             self.client.server.save()
+
             mqtt_publish.send(sender=Client.__class__, client=self.client, userdata=cli._userdata, mid=mid)
+
             cli.loop_write()
+
             if not self.client.clean_session and not self.client.client_id:
-                name = cli._client_id.split('/')[-1]  # Filter for auto-gen in format paho/CLIENT_ID
+                name = cli._client_id.decode().split('/')[-1]  # Filter for auto-gen in format paho/CLIENT_ID
                 cli_id, is_new = ClientId.objects.get_or_create(name=name)
+
                 self.client.client_id = cli_id
                 self.client.save()
+
             cli.disconnect()
             mqtt_disconnect.send(sender=Server.__class__, client=self.client, userdata=cli._userdata, rc=rc)
+
         except socket.gaierror as ex:  # pragma: no cover
             if ex.errno == 11004:
                 self.client.server.status = PROTO_MQTT_CONN_ERROR_ADDR_FAILED
