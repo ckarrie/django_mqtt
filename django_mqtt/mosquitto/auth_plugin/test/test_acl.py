@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase, Client, override_settings
-from django.core.urlresolvers import reverse
+# from django.core.urlresolvers import reverse
+from django.urls import reverse
 
 from django_mqtt.mosquitto.auth_plugin.test.utils import BasicAuthWithTopicTestCase
 from django_mqtt import models
@@ -91,7 +92,7 @@ class NoAcc(BasicACLWithTopicTestCase):
 class PubAcc(BasicACLWithTopicTestCase):
     def setUp(self):
         BasicACLWithTopicTestCase.setUp(self)
-        self.acc = models.PROTO_MQTT_ACC_PUB
+        self.acc = models.PROTO_MQTT_ACC_WRITE
 
     def test_login_no_acl_allow(self):
         response = self._test_login_no_acl_allow()
@@ -149,7 +150,7 @@ class PubAcc(BasicACLWithTopicTestCase):
 class SusAcc(BasicACLWithTopicTestCase):
     def setUp(self):
         BasicACLWithTopicTestCase.setUp(self)
-        self.acc = models.PROTO_MQTT_ACC_SUS
+        self.acc = models.PROTO_MQTT_ACC_READ | models.PROTO_MQTT_ACC_SUBSCRIBE
 
     def test_login_no_acl_allow(self):
         response = self._test_login_no_acl_allow()
@@ -173,7 +174,7 @@ class SusAcc(BasicACLWithTopicTestCase):
 
     def test_login_with_sus_acl(self):
         response = self._test_login_with_sus_acl()
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response)
         username = 'new_user'
         User.objects.create_user(username, password=self.password)
         response = self.client.post(self.url_testing, {'username': username,
@@ -202,3 +203,40 @@ class SusAcc(BasicACLWithTopicTestCase):
     def test_login_with_pub_acl_group(self):
         response = self._test_login_with_pub_acl_group()
         self.assertEqual(response.status_code, 403)
+
+
+class QSAcc(TestCase):
+
+    def create_writeable_acl(self):
+        topic = models.Topic.objects.create(name='w')
+        return models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_WRITE, topic=topic)
+
+    def create_readable_acl(self):
+        topic = models.Topic.objects.create(name='r')
+        return models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_READ, topic=topic)
+
+    def create_subscribable_acl(self):
+        topic = models.Topic.objects.create(name='s')
+        return models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUBSCRIBE, topic=topic)
+
+    def create_readable_subscribable_acl(self):
+        topic = models.Topic.objects.create(name='rs')
+        return models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUBSCRIBE | models.PROTO_MQTT_ACC_READ, topic=topic)
+
+    def setUp(self):
+        self.create_readable_acl()
+        self.create_readable_subscribable_acl()
+        self.create_writeable_acl()
+        self.create_subscribable_acl()
+
+    def test_readable(self):
+        acl = models.ACL.objects.is_readable()
+        self.assertEqual(acl.count(), 2)
+
+    def test_writable(self):
+        acl = models.ACL.objects.is_writable()
+        self.assertEqual(acl.count(), 1)
+
+    def test_subscribable(self):
+        acl = models.ACL.objects.is_subscribable()
+        self.assertEqual(acl.count(), 2)

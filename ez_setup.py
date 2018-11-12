@@ -68,11 +68,14 @@ def get_zip_class():
     """
     Supplement ZipFile class to support context manager for Python 2.6
     """
+
     class ContextualZipFile(zipfile.ZipFile):
         def __enter__(self):
             return self
+
         def __exit__(self, type, value, traceback):
-            self.close
+            self.close()
+
     return zipfile.ZipFile if hasattr(zipfile.ZipFile, '__exit__') else \
         ContextualZipFile
 

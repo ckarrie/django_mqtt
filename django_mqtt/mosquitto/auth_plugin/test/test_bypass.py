@@ -9,9 +9,9 @@ class PubAcc(BasicAuthWithTopicTestCase):
         BasicAuthWithTopicTestCase.setUp(self)
         topic = models.Topic.objects.create(name='#')
         self.acc_allow = False
-        self.acc = models.PROTO_MQTT_ACC_PUB
-        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_PUB, topic=topic)
-        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUS, topic=topic)
+        self.acc = models.PROTO_MQTT_ACC_WRITE
+        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_WRITE, topic=topic)
+        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUBSCRIBE & models.PROTO_MQTT_ACC_READ, topic=topic)
 
     def test_wrong_user(self):
         response = self._test_wrong_user()
@@ -47,9 +47,9 @@ class SusAcc(BasicAuthWithTopicTestCase):
         BasicAuthWithTopicTestCase.setUp(self)
         topic = models.Topic.objects.create(name='#')
         self.acc_allow = False
-        self.acc = models.PROTO_MQTT_ACC_SUS
-        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_PUB, topic=topic)
-        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUS, topic=topic)
+        self.acc = models.PROTO_MQTT_ACC_SUBSCRIBE | models.PROTO_MQTT_ACC_READ
+        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_WRITE, topic=topic)
+        models.ACL.objects.create(acc=models.PROTO_MQTT_ACC_SUBSCRIBE | models.PROTO_MQTT_ACC_READ, topic=topic)
 
     @override_settings(MQTT_ACL_ALLOW=True)
     @override_settings(MQTT_ACL_ALLOW_ANONIMOUS=True)

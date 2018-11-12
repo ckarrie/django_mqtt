@@ -1,7 +1,8 @@
 
 from django.contrib.auth.models import User
 from django.test import TestCase, Client, override_settings
-from django.core.urlresolvers import reverse
+# from django.core.urlresolvers import reverse
+from django.urls import reverse
 
 from django_mqtt import models
 from django_mqtt.mosquitto.auth_plugin.test.utils import BasicAuthWithTopicTestCase
@@ -55,7 +56,7 @@ class NoAcc(BasicAuthWithTopicTestCase):
 class PubAcc(BasicAuthWithTopicTestCase):
     def setUp(self):
         BasicAuthWithTopicTestCase.setUp(self)
-        self.acc = models.PROTO_MQTT_ACC_PUB
+        self.acc = models.PROTO_MQTT_ACC_WRITE
 
     def test_login_with_pub_acl_public(self):
         response = self._test_login_with_pub_acl_public()
@@ -89,7 +90,7 @@ class PubAcc(BasicAuthWithTopicTestCase):
 class SusAcc(BasicAuthWithTopicTestCase):
     def setUp(self):
         BasicAuthWithTopicTestCase.setUp(self)
-        self.acc = models.PROTO_MQTT_ACC_SUS
+        self.acc = models.PROTO_MQTT_ACC_SUBSCRIBE | models.PROTO_MQTT_ACC_READ
 
     def test_login_with_sus_acl_public(self):
         response = self._test_login_with_sus_acl_public()

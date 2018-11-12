@@ -99,6 +99,7 @@ class Acl(View):
         :param kwargs:
         :return:
         """
+
         data = {}
         if hasattr(request, 'POST'):
             data = request.POST

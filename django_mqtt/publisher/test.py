@@ -75,30 +75,37 @@ class PublishTestCase(TestCase):
             server.status = init_status
             server.save()
 
+    @override_settings(MQTT_ALLOW_EMPTY_CLIENT_ID=True) # this feels like a bit of a hack to be honest...
     def test_publish_ok_clear(self):
         server = Server.objects.create(host='test.mosquitto.org', port=1883)
         self.assertEqual(server.status, PROTO_MQTT_CONN_ERROR_UNKNOWN)
+
         init_status = server.status
         self.assertNotEqual(server.status, PROTO_MQTT_CONN_OK)
+
         client = Client.objects.create(server=server, clean_session=False)
         self.assertEqual(client.client_id, None)
 
         topic = Topic.objects.create(name='/test/publish')
+
         for qos in [MQTT_QoS0, MQTT_QoS1, MQTT_QoS2]:
             data, is_new = Data.objects.get_or_create(client=client, topic=topic)
             data.qos = qos
-            data.payload = 'test %(qos)s' % {'qos': qos}
+            data.payload = 'test {}'.format(qos)
             data.retain = True
             data.save()
             data.update_remote()
 
             server = Server.objects.get(pk=server.pk)
             self.assertEqual(server.status, PROTO_MQTT_CONN_OK)
+
             server.status = PROTO_MQTT_CONN_ERROR_UNKNOWN
             server.save()
 
             client = Client.objects.get(pk=client.pk)
+
             self.assertNotEqual(client.client_id, None)
+            self.assertNotEqual(client.client_id, "")
             client.client_id = None
             client.save()
 

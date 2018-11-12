@@ -1,5 +1,4 @@
-
-from django_mqtt.models import ACL, PROTO_MQTT_ACC
+from django_mqtt.models import ACL, PROTO_MQTT_ACC_SUBSCRIBE, PROTO_MQTT_ACC_READ, PROTO_MQTT_ACC_WRITE
 from django.conf import settings
 
 
@@ -18,10 +17,13 @@ def has_permission(user, topic, acc=None, clientid=None):
     """
 
     allow = False
+
     if hasattr(settings, 'MQTT_ACL_ALLOW'):
         allow = settings.MQTT_ACL_ALLOW
+
     if hasattr(settings, 'MQTT_ACL_ALLOW_ANONIMOUS'):
-        if user is None or user.is_anonymous():
+
+        if user is None or user.is_anonymous:
             allow = settings.MQTT_ACL_ALLOW_ANONIMOUS & allow
             if not allow:
                 return allow
@@ -30,16 +32,21 @@ def has_permission(user, topic, acc=None, clientid=None):
         return allow
 
     acls = ACL.objects.filter(topic__name=topic)
-    if acc not in dict(PROTO_MQTT_ACC).keys():
-        acc = None
 
-    if acc and acls.filter(acc=acc).exists():
-        acl = acls.filter(acc=acc).get()
-        allow = acl.has_permission(user=user)
-    else:
-        allow = ACL.get_default(acc, user=user)
+    if acc is not None and acc > 0:
 
-        # TODO search best candidate
+        if acc & PROTO_MQTT_ACC_READ == PROTO_MQTT_ACC_READ:
+            acls = acls.filter(readable=PROTO_MQTT_ACC_READ)
 
-    return allow
+        if acc & PROTO_MQTT_ACC_WRITE == PROTO_MQTT_ACC_WRITE:
+            acls = acls.filter(writeable=PROTO_MQTT_ACC_WRITE)
 
+        if acc & PROTO_MQTT_ACC_SUBSCRIBE == PROTO_MQTT_ACC_SUBSCRIBE:
+            acls = acls.filter(subscribable=PROTO_MQTT_ACC_SUBSCRIBE)
+
+        if acls.count() > 0:
+            acl = acls.get()
+            return acl.has_permission(user=user)
+
+    # TODO search best candidate
+    return ACL.get_default(acc, user=user)

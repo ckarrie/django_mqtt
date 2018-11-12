@@ -251,22 +251,22 @@ class ACLModelsTestCase(TestCase):
 
     def test_string(self):
         topic = Topic.objects.create(name='/test')
-        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUS, allow=True)
-        self.assertEqual(str(acl), "ACL Suscriptor for /test")
-        self.assertEqual(unicode(acl), u"ACL Suscriptor for /test")
+        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, allow=True)
+        self.assertEqual(acl.acc, PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
+        self.assertEqual(str(acl), "ACL rs for /test")
 
     def test_get_acl_no_candidate(self):
         Topic.objects.create(name='/test')
-        self.assertIsNone(ACL.get_acl('/test', PROTO_MQTT_ACC_SUS))
-        self.assertIsNone(ACL.get_acl('/test', PROTO_MQTT_ACC_PUB))
+        self.assertIsNone(ACL.get_acl('/test', PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ))
+        self.assertIsNone(ACL.get_acl('/test', PROTO_MQTT_ACC_WRITE))
 
     def test_get_acl(self):
         topic = Topic.objects.create(name=WILDCARD_MULTI_LEVEL)
-        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUS, allow=True)
+        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, allow=True)
         topic = Topic.objects.create(name='/+')
-        acl_plus = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUS, allow=True)
-        self.assertEqual(ACL.get_acl('/test', PROTO_MQTT_ACC_SUS), acl_plus)
-        self.assertEqual(ACL.get_acl('/test/test', PROTO_MQTT_ACC_SUS), acl)
+        acl_plus = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, allow=True)
+        self.assertEqual(ACL.get_acl('/test', PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ), acl_plus)
+        self.assertEqual(ACL.get_acl('/test/test', PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ), acl)
         self.assertRaises(ValueError, ACL.get_acl, object)
         self.assertEqual(acl > acl_plus, True)
         self.assertEqual(acl_plus < acl, True)
@@ -275,31 +275,39 @@ class ACLModelsTestCase(TestCase):
         for us, ano in [(False, False), (True, False), (True, True)]:
             settings.MQTT_ACL_ALLOW = us
             settings.MQTT_ACL_ALLOW_ANONIMOUS = ano
-            allow = ACL.get_default(PROTO_MQTT_ACC_SUS)
+            allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
             self.assertEqual(allow, ano)
-            allow = ACL.get_default(PROTO_MQTT_ACC_SUS, self.user_login)
+            allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, self.user_login)
             self.assertEqual(allow, us)
         settings.MQTT_ACL_ALLOW = False
         settings.MQTT_ACL_ALLOW_ANONIMOUS = False
         topic = Topic.objects.create(name=WILDCARD_MULTI_LEVEL)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS)
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
         self.assertEqual(allow, False)
 
-        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUS, allow=True)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS)
+        acl = ACL.objects.create(topic=topic, acc=PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, allow=True)
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
         self.assertEqual(allow, False)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS, self.user_login)
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, self.user_login)
         self.assertEqual(allow, True)
+
         acl.users.add(self.user_login)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS)
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
         self.assertEqual(allow, False)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS, self.user_login)
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, self.user_login)
         self.assertEqual(allow, True)
+
         acl.password = '1234'
         acl.save()
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS)
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ)
         self.assertEqual(allow, False)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS, self.user_login)
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, self.user_login)
         self.assertEqual(allow, True)
-        allow = ACL.get_default(PROTO_MQTT_ACC_SUS, password='1234')
+
+        allow = ACL.get_default(PROTO_MQTT_ACC_SUBSCRIBE | PROTO_MQTT_ACC_READ, password='1234')
         self.assertEqual(allow, True)

@@ -1,4 +1,8 @@
-import six
+import operator
+from functools import reduce
+
+# import six
+from django.db.models import F, IntegerField, ExpressionWrapper
 
 from django_mqtt.validators import *
 from django.contrib.auth.models import Group
@@ -9,11 +13,18 @@ from django.db import models
 from django_mqtt.protocol import WILDCARD_SINGLE_LEVEL, WILDCARD_MULTI_LEVEL
 from django_mqtt.protocol import TOPIC_SEP, TOPIC_BEGINNING_DOLLAR
 
-PROTO_MQTT_ACC_SUS = 1
-PROTO_MQTT_ACC_PUB = 2
+PROTO_MQTT_ACC_NONE = 0
+PROTO_MQTT_ACC_READ = 1
+PROTO_MQTT_ACC_WRITE = 2
+PROTO_MQTT_ACC_SUBSCRIBE = 4
+
+PROTO_MQTT_ACC_ALL = PROTO_MQTT_ACC_READ | PROTO_MQTT_ACC_WRITE | PROTO_MQTT_ACC_SUBSCRIBE
+
 PROTO_MQTT_ACC = (
-    (PROTO_MQTT_ACC_SUS, _('Suscriptor')),
-    (PROTO_MQTT_ACC_PUB, _('Publisher')),
+    (PROTO_MQTT_ACC_NONE, _('None')),
+    (PROTO_MQTT_ACC_READ, _('Read')),
+    (PROTO_MQTT_ACC_WRITE, _('Write')),
+    (PROTO_MQTT_ACC_SUBSCRIBE, _('Subscribe')),
 )
 
 ALLOW_EMPTY_CLIENT_ID = False
@@ -192,43 +203,82 @@ class Topic(SecureSave):
                                        using=using, update_fields=update_fields)
 
 
+class ACLManager(models.Manager):
+
+    def get_queryset(self):
+        qs = super(ACLManager, self).get_queryset()
+        qs = qs.annotate(readable=ExpressionWrapper(F('acc').bitand(PROTO_MQTT_ACC_READ), output_field=IntegerField()))
+        qs = qs.annotate(
+            writeable=ExpressionWrapper(F('acc').bitand(PROTO_MQTT_ACC_WRITE), output_field=IntegerField()))
+        qs = qs.annotate(
+            subscribable=ExpressionWrapper(F('acc').bitand(PROTO_MQTT_ACC_SUBSCRIBE), output_field=IntegerField()))
+        return qs
+
+    def is_readable(self):
+        return self.filter(readable=PROTO_MQTT_ACC_READ)
+
+    def is_writable(self):
+        return self.filter(writeable=PROTO_MQTT_ACC_WRITE)
+
+    def is_subscribable(self):
+        return self.filter(subscribable=PROTO_MQTT_ACC_SUBSCRIBE)
+
+
 class ACL(models.Model):
     allow = models.BooleanField(default=True)
-    topic = models.ForeignKey(Topic)  # There is many of acc options by topic
+    topic = models.ForeignKey(Topic, on_delete=models.CASCADE)  # There is many of acc options by topic
     acc = models.IntegerField(choices=PROTO_MQTT_ACC)
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True)
     groups = models.ManyToManyField(Group, blank=True)
     password = models.CharField(max_length=512, blank=True, null=True,
                                 help_text='Only valid for connect')
 
+    objects = ACLManager()
+
     class Meta:
         unique_together = ('topic', 'acc')
 
+    @property
+    def is_readable(self):
+        return self.acc & PROTO_MQTT_ACC_READ == PROTO_MQTT_ACC_READ
+
     @classmethod
     def get_default(cls, acc, user=None, password=None):  # TODO rename
-        """
-            :type user: django.contrib.auth.models.User
-            :param user:
-            :return: bool
-        """
         allow = False
         if hasattr(settings, 'MQTT_ACL_ALLOW'):
             allow = settings.MQTT_ACL_ALLOW
         if hasattr(settings, 'MQTT_ACL_ALLOW_ANONIMOUS'):
-            if user is None or user.is_anonymous():
+            if user is None or user.is_anonymous:
                 allow = settings.MQTT_ACL_ALLOW_ANONIMOUS & allow
                 if not allow and not password:
                     return allow
         try:
             broadcast_topic = Topic.objects.get(name=WILDCARD_MULTI_LEVEL)
             broadcast = cls.objects.filter(topic=broadcast_topic)
-            if acc in dict(PROTO_MQTT_ACC).keys():
-                if broadcast.filter(acc=acc).exists():
-                    broadcast_acl = broadcast.get(acc=acc)
-                    allow = broadcast_acl.has_permission(user=user, password=password)
+
+            # if acc in dict(PROTO_MQTT_ACC).keys():
+            #     if broadcast.filter(acc=acc).exists():
+            #         broadcast_acl = broadcast.get(acc=acc)
+            #         allow = broadcast_acl.has_permission(user=user, password=password)
+            if acc is not None and acc > 0:
+
+                if acc & PROTO_MQTT_ACC_READ == PROTO_MQTT_ACC_READ:
+                    broadcast = broadcast.filter(readable=PROTO_MQTT_ACC_READ)
+
+                if acc & PROTO_MQTT_ACC_WRITE == PROTO_MQTT_ACC_WRITE:
+                    broadcast = broadcast.filter(writeable=PROTO_MQTT_ACC_WRITE)
+
+                if acc & PROTO_MQTT_ACC_SUBSCRIBE == PROTO_MQTT_ACC_SUBSCRIBE:
+                    broadcast = broadcast.filter(subscribable=PROTO_MQTT_ACC_SUBSCRIBE)
+
+                if broadcast.count() > 0:
+                    acl = broadcast.get()
+                    return acl.has_permission(user=user, password=password)
+
             else:
                 for acl in broadcast:
                     allow &= acl.has_permission(user=user, password=password)
+
         except Topic.DoesNotExist:
             pass
         return allow
@@ -242,26 +292,33 @@ class ACL(models.Model):
             return self.topic < other.topic
 
     @classmethod
-    def get_acl(cls, topic, acc=PROTO_MQTT_ACC_PUB):
-        if isinstance(topic, six.string_types) or isinstance(topic, six.text_type):
+    def get_acl(cls, topic, acc=PROTO_MQTT_ACC_ALL):
+
+        # if isinstance(topic, six.string_types) or isinstance(topic, six.text_type):
+        if isinstance(topic, str):
             topic, is_new = Topic.objects.get_or_create(name=topic)
         elif not isinstance(topic, Topic):
             raise ValueError('topic must be Topic or String')
+
         candidates = []
         try:
-            candidates = [ACL.objects.get(topic=topic, acc=acc)]
+            candidates = [ACL.objects.get(topic=topic)]
         except ACL.DoesNotExist:
-            for candidate in cls.objects.filter(topic__wildcard=True, acc=acc):
+            for candidate in cls.objects.filter(topic__wildcard=True):
                 if topic in candidate.topic:
                     candidates.append(candidate)
+
+        # TODO - filter the candidates by the requested access...
         if len(candidates) == 0:
             return None
+
         return min(candidates)
 
     def is_public(self):
         return self.users.count() == 0 and self.groups.count() == 0 and not self.password
 
     def has_permission(self, user=None, password=None):
+
         allow = False
         if self.is_public():
             allow = self.allow
@@ -273,12 +330,22 @@ class ACL(models.Model):
                     allow = self.allow
                 else:
                     allow = not self.allow
+
             if self.password and password:
                 allow = self.password == password
+
         return allow
 
     def __unicode__(self):
-        return "ACL %s for %s" % (dict(PROTO_MQTT_ACC)[self.acc], self.topic)
+        acc = []
+        for a in map(list, PROTO_MQTT_ACC):
+            if a[0] & self.acc > 0:
+                acc.append(a[1][0])
+        return "ACL %s for %s" % ("".join(acc).lower(), self.topic)
 
     def __str__(self):
-        return "ACL %s for %s" % (dict(PROTO_MQTT_ACC)[self.acc], self.topic)
+        acc = []
+        for a in map(list, PROTO_MQTT_ACC):
+            if a[0] & self.acc > 0:
+                acc.append(a[1][0])
+        return "ACL %s for %s" % ("".join(acc).lower(), self.topic)
