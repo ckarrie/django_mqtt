@@ -1,4 +1,4 @@
-Django-MQTT [![Build Status](https://travis-ci.org/ehooo/django_mqtt.svg?branch=master)](https://travis-ci.org/ehooo/django_mqtt)
+Django-MQTT [![Build Status](https://travis-ci.org/pcrane/django_mqtt.svg?branch=master)](https://travis-ci.org/pcrane/django_mqtt)
 ===========
 It is a django module that allow your:
 - Mosquito Auth configured with [mosquitto-auth-plug](https://github.com/jpmens/mosquitto-auth-plug)
