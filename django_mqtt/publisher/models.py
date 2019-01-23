@@ -36,13 +36,13 @@ PROTO_MQTT_CONN_ERROR_DOWN = 212
 PROTO_MQTT_CONN_ERROR_UNREACHABLE = 213
 
 CERT_REQS = (
-    (ssl.CERT_REQUIRED, _('Required')),
-    (ssl.CERT_OPTIONAL, _('Optional')),
-    (ssl.CERT_NONE, _('None')),
+    (int(ssl.CERT_REQUIRED), _('Required')),
+    (int(ssl.CERT_OPTIONAL), _('Optional')),
+    (int(ssl.CERT_NONE), _('None')),
 )
 PROTO_SSL_VERSION = [
-    (ssl.PROTOCOL_TLSv1, 'v1'),
-    (ssl.PROTOCOL_SSLv23, 'v2.3'),
+    (int(ssl.PROTOCOL_TLSv1), 'v1'),
+    (int(ssl.PROTOCOL_SSLv23), 'v2.3'),
 ]
 
 try:
